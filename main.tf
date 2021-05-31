@@ -47,7 +47,7 @@ module "vpc" {
 
 resource "aws_security_group" "this" {
   name_prefix = var.name
-  vpc_id      = var.vpc_id == null ? module.vpc[0].vpc_id : vpc_id
+  vpc_id      = var.vpc_id == null ? module.vpc[0].vpc_id : var.vpc_id
 
   tags = merge(
     {
