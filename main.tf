@@ -1,0 +1,331 @@
+locals {
+  lambda = {
+    start = {
+      file = "${path.module}/lambda/start.py"
+      zip  = "${path.module}/lambda/start.zip"
+    }
+
+    stop = {
+      file = "${path.module}/lambda/stop.py"
+      zip  = "${path.module}/lambda/stop.zip"
+    }
+  }
+
+  event = {
+    start = {
+      AEDT = "cron(0 20 ? * SUN-THU *)"
+      AEST = "cron(0 21 ? * SUN-THU *)"
+    }
+
+    stop = {
+      AEDT = "cron(0 8 ? * * *)"
+      AEST = "cron(0 9 ? * * *)"
+    }
+  }
+}
+
+provider "aws" {
+  # checkov:skip=CKV_AWS_41:Required.
+  access_key = var.access_key
+  secret_key = var.secret_key
+  region     = var.region
+}
+
+data "aws_caller_identity" "current" {}
+
+module "vpc" {
+  source = "github.com/kazhala/terraform-aws-vpc?ref=v0.2.1"
+
+  count = var.vpc_id == null ? 1 : 0
+
+  name                = var.name
+  cidr_block          = var.cidr_block
+  enable_vpc_flow_log = true
+  subnet_count        = 1
+  tags                = var.tags
+}
+
+resource "aws_security_group" "this" {
+  name_prefix = var.name
+  vpc_id      = var.vpc_id == null ? module.vpc[0].vpc_id : vpc_id
+
+  tags = merge(
+    {
+      Name = var.name
+    },
+    var.tags
+  )
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_security_group_rule" "inbound_ssh" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  security_group_id = aws_security_group.this.id
+  cidr_blocks       = [for ip in var.ip_addresses : "${ip}/32"]
+}
+
+resource "aws_security_group_rule" "inbound_self" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  security_group_id = aws_security_group.this.id
+  self              = true
+}
+
+resource "aws_security_group_rule" "outbound_all" {
+  type              = "egress"
+  to_port           = 0
+  protocol          = "-1"
+  from_port         = 0
+  security_group_id = aws_security_group.this.id
+  cidr_blocks       = ["0.0.0.0/0"]
+}
+
+resource "aws_sns_topic" "this" {
+  count = var.email != null ? 1 : 0
+
+  # checkov:skip=CKV_AWS_26:No encryption.
+  name_prefix = var.name
+
+  tags = merge(
+    {
+      Name = var.name
+    },
+    var.tags
+  )
+}
+
+resource "aws_sns_topic_subscription" "this" {
+  count = var.email != null ? 1 : 0
+
+  topic_arn = aws_sns_topic.this[0].arn
+  protocol  = "email"
+  endpoint  = var.email
+}
+
+data "aws_iam_policy_document" "lambda_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "lambda_permission" {
+  statement {
+    actions = [
+      "ec2:StartInstances",
+      "ec2:StopInstances",
+      "ec2:DescribeInstances",
+    ]
+
+    resources = [aws_instance.this.arn]
+  }
+
+  dynamic "statement" {
+    for_each = aws_sns_topic.this
+    content {
+      actions = ["sns:Publish"]
+
+      resources = [aws_sns_topic.this[statement.key].arn]
+    }
+  }
+}
+
+resource "aws_iam_role" "lambda" {
+  name_prefix        = "lambda-${var.name}-"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "lambda" {
+  name_prefix = "lambda-${var.name}-"
+  policy      = data.aws_iam_policy_document.lambda_permission.json
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "lambda" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.lambda.arn
+}
+
+resource "random_id" "this" {
+  byte_length = 8
+}
+
+data "archive_file" "lambda_start" {
+  type             = "zip"
+  source_file      = local.lambda.start.file
+  output_path      = local.lambda.start.zip
+  output_file_mode = "0666"
+}
+
+resource "aws_lambda_function" "start" {
+  # checkov:skip=CKV_AWS_116:No dlq.
+  # checkov:skip=CKV_AWS_117:No vpc.
+  # checkov:skip=CKV_AWS_50:No x-ray.
+  # checkov:skip=CKV_AWS_115:No limit.
+  function_name    = "${var.name}-start-${random_id.this.hex}"
+  filename         = local.lambda.start.zip
+  source_code_hash = data.archive_file.lambda_start.output_base64sha256
+  handler          = "start.lambda_handler"
+  role             = aws_iam_role.lambda.arn
+  runtime          = "python3.8"
+  timeout          = 60
+
+  environment {
+    variables = {
+      "INSTANCE"  = "value"
+      "TOPIC_ARN" = var.email != null ? aws_sns_topic.this[0].arn : ""
+    }
+  }
+}
+
+data "archive_file" "lambda_stop" {
+  type             = "zip"
+  source_file      = local.lambda.stop.file
+  output_path      = local.lambda.stop.zip
+  output_file_mode = "0666"
+}
+
+resource "aws_lambda_function" "stop" {
+  # checkov:skip=CKV_AWS_116:No dlq.
+  # checkov:skip=CKV_AWS_117:No vpc.
+  # checkov:skip=CKV_AWS_50:No x-ray.
+  # checkov:skip=CKV_AWS_115:No limit.
+  function_name    = "${var.name}-stop-${random_id.this.hex}"
+  filename         = local.lambda.stop.zip
+  source_code_hash = data.archive_file.lambda_stop.output_base64sha256
+  handler          = "stop.lambda_handler"
+  role             = aws_iam_role.lambda.arn
+  runtime          = "python3.8"
+  timeout          = 10
+
+  environment {
+    variables = {
+      "INSTANCE" = "value"
+    }
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "lambda_start" {
+  name_prefix         = "lambda-${var.name}-start-"
+  schedule_expression = local.event.start[var.time_zone]
+
+  is_enabled = true
+}
+
+resource "aws_cloudwatch_event_target" "lambda_start" {
+  rule      = aws_cloudwatch_event_rule.lambda_start.name
+  arn       = aws_lambda_function.start.arn
+  target_id = aws_lambda_function.start.id
+}
+
+resource "aws_lambda_permission" "lambda_start" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.start.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.lambda_start.arn
+}
+
+resource "aws_cloudwatch_event_rule" "lambda_stop" {
+  name_prefix         = "lambda-${var.name}-stop-"
+  schedule_expression = local.event.stop[var.time_zone]
+
+  is_enabled = true
+}
+
+resource "aws_cloudwatch_event_target" "lambda_stop" {
+  rule      = aws_cloudwatch_event_rule.lambda_stop.name
+  arn       = aws_lambda_function.stop.arn
+  target_id = aws_lambda_function.stop.id
+}
+
+resource "aws_lambda_permission" "lambda_stop" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.stop.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.lambda_stop.arn
+}
+
+data "aws_iam_policy_document" "ec2_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ec2" {
+  name_prefix        = "ec2-${var.name}-"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "ec2" {
+  role       = aws_iam_role.ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}
+
+resource "aws_iam_instance_profile" "this" {
+  name_prefix = "${var.name}-"
+  role        = aws_iam_role.ec2.name
+}
+
+data "aws_ssm_parameter" "ami" {
+  name = "/aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
+}
+
+resource "aws_instance" "this" {
+  # checkov:skip=CKV2_AWS_17:Already configured.
+  # checkov:skip=CKV_AWS_126:No detailed monitoring.
+  iam_instance_profile   = aws_iam_instance_profile.this.name
+  ami                    = var.ami == null ? data.aws_ssm_parameter.ami.value : var.ami
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.this.id]
+  subnet_id              = var.subnet_id == null ? module.vpc[0].public_subnets[0] : var.subnet_id
+  ebs_optimized          = true
+
+  root_block_device {
+    encrypted             = true
+    delete_on_termination = true
+    volume_type           = "gp3"
+    volume_size           = var.volume_size
+  }
+
+  user_data = <<EOF
+#!/bin/bash -ex
+sudo sed -i "s/^PermitRootLogin prohibit-password/PermitRootLogin yes/g" /etc/ssh/sshd_config
+sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+sudo service ssh restart
+echo ubuntu:${var.instance_password} | sudo chpasswd
+EOF
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
+  tags = merge(
+    {
+      Name = var.name
+    },
+    var.tags
+  )
+}
