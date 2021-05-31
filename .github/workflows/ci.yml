@@ -1,0 +1,36 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  Lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          curl -Lo /tmp/terraform-docs.tar.gz https://github.com/terraform-docs/terraform-docs/releases/download/"$DOC_VERSION"/terraform-docs-"$DOC_VERSION"-$(uname)-amd64.tar.gz
+          tar -xzf /tmp/terraform-docs.tar.gz -C /tmp
+          chmod +x /tmp/terraform-docs
+          sudo mv /tmp/terraform-docs /usr/local/bin/terraform-docs
+        env:
+          DOC_VERSION: v0.13.0
+        name: Install terraform-docs
+      - run: terraform init
+        name: Terraform init
+      - uses: pre-commit/action@v2.0.0
+        name: Run pre-commit
+      - run: terraform validate
+        name: Run terraform validate
+
+  Compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - run: |
+          python -m pip install --upgrade pip
+          pip install checkov
+        name: Install dependencies
+      - run: checkov -d .
+        name: Run checkov
