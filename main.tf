@@ -119,10 +119,15 @@ data "aws_iam_policy_document" "lambda_permission" {
     actions = [
       "ec2:StartInstances",
       "ec2:StopInstances",
-      "ec2:DescribeInstances",
     ]
 
     resources = [aws_instance.this.arn]
+  }
+
+  statement {
+    actions = ["ec2:DescribeInstances"]
+
+    resources = ["*"]
   }
 
   dynamic "statement" {
