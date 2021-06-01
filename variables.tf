@@ -1,17 +1,13 @@
 variable "region" {
   description = "Region to deploy the infrastructure."
   type        = string
-  default     = "ap-southeast-2"
+  default     = null
 }
 
-variable "access_key" {
-  description = "AWS IAM User access key."
+variable "profile" {
+  description = "Profile to use to deploy the infrastructure."
   type        = string
-}
-
-variable "secret_key" {
-  description = "AWS IAM User secret key "
-  type        = string
+  default     = null
 }
 
 variable "tags" {
@@ -26,7 +22,7 @@ variable "name" {
 }
 
 variable "vpc_id" {
-  description = "VPC to deploy the EC2 instance."
+  description = "VPC to deploy the EC2 instance. Required if subnet_id is set."
   type        = string
   default     = null
 }
@@ -66,6 +62,30 @@ variable "time_zone" {
   }
 }
 
+variable "start_schedule" {
+  description = "Instance start cron schedule expression."
+  type        = string
+  default     = null
+}
+
+variable "stop_schedule" {
+  description = "Instance stop cron schedule expression."
+  type        = string
+  default     = null
+}
+
+variable "enable_auto_start" {
+  description = "Enable EC2 auto start based on schedule."
+  type        = bool
+  default     = true
+}
+
+variable "enable_auto_stop" {
+  description = "Enable EC2 auto stop based on schedule."
+  type        = bool
+  default     = true
+}
+
 variable "ami" {
   description = "The ID of the AMI to launch the EC2 instance."
   type        = string
@@ -87,4 +107,10 @@ variable "volume_size" {
 variable "instance_password" {
   description = "The password of the instance."
   type        = string
+}
+
+variable "instance_permission_policies" {
+  description = "List of instance permission policy ARNs."
+  type        = list(string)
+  default     = ["arn:aws:iam::aws:policy/AdministratorAccess"]
 }

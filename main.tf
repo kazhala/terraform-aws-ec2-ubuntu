@@ -25,10 +25,8 @@ locals {
 }
 
 provider "aws" {
-  # checkov:skip=CKV_AWS_41:Required.
-  access_key = var.access_key
-  secret_key = var.secret_key
-  region     = var.region
+  profile = var.profile
+  region  = var.region
 }
 
 data "aws_caller_identity" "current" {}
@@ -187,7 +185,7 @@ resource "aws_lambda_function" "start" {
 
   environment {
     variables = {
-      "INSTANCE"  = "value"
+      "INSTANCE"  = aws_instance.this.id
       "TOPIC_ARN" = var.email != null ? aws_sns_topic.this[0].arn : ""
     }
   }
@@ -215,16 +213,16 @@ resource "aws_lambda_function" "stop" {
 
   environment {
     variables = {
-      "INSTANCE" = "value"
+      "INSTANCE" = aws_instance.this.id
     }
   }
 }
 
 resource "aws_cloudwatch_event_rule" "lambda_start" {
   name_prefix         = "lambda-${var.name}-start-"
-  schedule_expression = local.event.start[var.time_zone]
+  schedule_expression = var.start_schedule == null ? local.event.start[var.time_zone] : var.start_schedule
 
-  is_enabled = true
+  is_enabled = var.enable_auto_start
 }
 
 resource "aws_cloudwatch_event_target" "lambda_start" {
@@ -242,9 +240,9 @@ resource "aws_lambda_permission" "lambda_start" {
 
 resource "aws_cloudwatch_event_rule" "lambda_stop" {
   name_prefix         = "lambda-${var.name}-stop-"
-  schedule_expression = local.event.stop[var.time_zone]
+  schedule_expression = var.stop_schedule == null ? local.event.stop[var.time_zone] : var.stop_schedule
 
-  is_enabled = true
+  is_enabled = var.enable_auto_stop
 }
 
 resource "aws_cloudwatch_event_target" "lambda_stop" {
@@ -279,8 +277,10 @@ resource "aws_iam_role" "ec2" {
 }
 
 resource "aws_iam_role_policy_attachment" "ec2" {
+  count = length(var.instance_permission_policies)
+
   role       = aws_iam_role.ec2.name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+  policy_arn = var.instance_permission_policies[count.index]
 }
 
 resource "aws_iam_instance_profile" "this" {
@@ -311,8 +311,8 @@ resource "aws_instance" "this" {
 
   user_data = <<EOF
 #!/bin/bash -ex
-sudo sed -i "s/^PermitRootLogin prohibit-password/PermitRootLogin yes/g" /etc/ssh/sshd_config
-sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+sudo sed -i 's/^.*PermitRootLogin prohibit-password/PermitRootLogin yes/g' /etc/ssh/sshd_config
+sudo sed -i 's/^.*PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
 sudo service ssh restart
 echo ubuntu:${var.instance_password} | sudo chpasswd
 EOF

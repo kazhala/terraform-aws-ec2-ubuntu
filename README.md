@@ -62,23 +62,35 @@
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_access_key"></a> [access\_key](#input\_access\_key) | AWS IAM User access key. | `string` | n/a | yes |
 | <a name="input_ami"></a> [ami](#input\_ami) | The ID of the AMI to launch the EC2 instance. | `string` | `null` | no |
 | <a name="input_cidr_block"></a> [cidr\_block](#input\_cidr\_block) | CIDR block for the VPC. | `string` | `"10.0.0.0/16"` | no |
 | <a name="input_email"></a> [email](#input\_email) | Email address to receive notificaiton. | `string` | `null` | no |
+| <a name="input_enable_auto_start"></a> [enable\_auto\_start](#input\_enable\_auto\_start) | Enable EC2 auto start based on schedule. | `bool` | `true` | no |
+| <a name="input_enable_auto_stop"></a> [enable\_auto\_stop](#input\_enable\_auto\_stop) | Enable EC2 auto stop based on schedule. | `bool` | `true` | no |
 | <a name="input_instance_password"></a> [instance\_password](#input\_instance\_password) | The password of the instance. | `string` | n/a | yes |
+| <a name="input_instance_permission_policies"></a> [instance\_permission\_policies](#input\_instance\_permission\_policies) | List of instance permission policy ARNs. | `list(string)` | <pre>[<br>  "arn:aws:iam::aws:policy/AdministratorAccess"<br>]</pre> | no |
 | <a name="input_instance_type"></a> [instance\_type](#input\_instance\_type) | The Instance Type to use. | `string` | `"t3.medium"` | no |
 | <a name="input_ip_addresses"></a> [ip\_addresses](#input\_ip\_addresses) | Office and Home IP addresses. | `list(string)` | `[]` | no |
 | <a name="input_name"></a> [name](#input\_name) | Default name for the resources. | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | Region to deploy the infrastructure. | `string` | `"ap-southeast-2"` | no |
-| <a name="input_secret_key"></a> [secret\_key](#input\_secret\_key) | AWS IAM User secret key | `string` | n/a | yes |
+| <a name="input_profile"></a> [profile](#input\_profile) | Profile to use to deploy the infrastructure. | `string` | `null` | no |
+| <a name="input_region"></a> [region](#input\_region) | Region to deploy the infrastructure. | `string` | `null` | no |
+| <a name="input_start_schedule"></a> [start\_schedule](#input\_start\_schedule) | Instance start cron schedule expression. | `string` | `null` | no |
+| <a name="input_stop_schedule"></a> [stop\_schedule](#input\_stop\_schedule) | Instance stop cron schedule expression. | `string` | `null` | no |
 | <a name="input_subnet_id"></a> [subnet\_id](#input\_subnet\_id) | Subnet to deploy the EC2 instance. Required if vpc\_id is set. | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Additional resource tags to apply to applicable resources. Format: {"key" = "value"}. | `map(string)` | `{}` | no |
 | <a name="input_time_zone"></a> [time\_zone](#input\_time\_zone) | Current timezone. Allowed values: AEDT \| AEST. | `string` | `"AEST"` | no |
 | <a name="input_volume_size"></a> [volume\_size](#input\_volume\_size) | Volume size for the EC2 instance. | `number` | `30` | no |
-| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | VPC to deploy the EC2 instance. | `string` | `null` | no |
+| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | VPC to deploy the EC2 instance. Required if subnet\_id is set. | `string` | `null` | no |
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+|------|-------------|
+| <a name="output_instance_arn"></a> [instance\_arn](#output\_instance\_arn) | The ARN of the instance. |
+| <a name="output_instance_id"></a> [instance\_id](#output\_instance\_id) | The ID of the instance. |
+| <a name="output_lambda_arns"></a> [lambda\_arns](#output\_lambda\_arns) | The ARNs of the lambda functions. |
+| <a name="output_sg_arn"></a> [sg\_arn](#output\_sg\_arn) | The ARN of the security group. |
+| <a name="output_sg_id"></a> [sg\_id](#output\_sg\_id) | The ID of the security group. |
+| <a name="output_subnet_id"></a> [subnet\_id](#output\_subnet\_id) | The ID of the subnet. |
+| <a name="output_vpc_id"></a> [vpc\_id](#output\_vpc\_id) | The ID of the VPC. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
