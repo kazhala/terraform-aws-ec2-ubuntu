@@ -72,8 +72,6 @@
 | <a name="input_instance_type"></a> [instance\_type](#input\_instance\_type) | The Instance Type to use. | `string` | `"t3.medium"` | no |
 | <a name="input_ip_addresses"></a> [ip\_addresses](#input\_ip\_addresses) | Office and Home IP addresses. | `list(string)` | `[]` | no |
 | <a name="input_name"></a> [name](#input\_name) | Default name for the resources. | `string` | n/a | yes |
-| <a name="input_profile"></a> [profile](#input\_profile) | Profile to use to deploy the infrastructure. | `string` | `null` | no |
-| <a name="input_region"></a> [region](#input\_region) | Region to deploy the infrastructure. | `string` | `null` | no |
 | <a name="input_start_schedule"></a> [start\_schedule](#input\_start\_schedule) | Instance start cron schedule expression. | `string` | `null` | no |
 | <a name="input_stop_schedule"></a> [stop\_schedule](#input\_stop\_schedule) | Instance stop cron schedule expression. | `string` | `null` | no |
 | <a name="input_subnet_id"></a> [subnet\_id](#input\_subnet\_id) | Subnet to deploy the EC2 instance. Required if vpc\_id is set. | `string` | `null` | no |

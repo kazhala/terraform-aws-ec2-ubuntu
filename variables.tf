@@ -1,15 +1,3 @@
-variable "region" {
-  description = "Region to deploy the infrastructure."
-  type        = string
-  default     = null
-}
-
-variable "profile" {
-  description = "Profile to use to deploy the infrastructure."
-  type        = string
-  default     = null
-}
-
 variable "tags" {
   description = "Additional resource tags to apply to applicable resources. Format: {\"key\" = \"value\"}."
   type        = map(string)
