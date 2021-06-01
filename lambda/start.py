@@ -24,7 +24,7 @@ def lambda_handler(event, context):
 
     if os.getenv("TOPIC_ARN"):
         waiter.wait(InstanceIds=instance_id)
-        instance_details = client.describe_instances(InstanceIds=instance_id)
+        instance_details = client.describe_instances(InstanceIds=[instance_id])
         message = instance_details["Reservations"][0]["Instances"][instance_id][
             "PublicDnsName"
         ]
