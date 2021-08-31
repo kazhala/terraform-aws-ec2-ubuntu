@@ -12,7 +12,7 @@ jobs:
           chmod +x /tmp/terraform-docs
           sudo mv /tmp/terraform-docs /usr/local/bin/terraform-docs
         env:
-          DOC_VERSION: v0.13.0
+          DOC_VERSION: v0.15.0
         name: Install terraform-docs
       - run: terraform init
         name: Terraform init
