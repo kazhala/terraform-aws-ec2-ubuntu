@@ -1,37 +1,33 @@
-output "vpc_id" {
-  description = "The ID of the VPC."
-  value       = var.vpc_id == null ? module.vpc[0].vpc_id : var.vpc_id
-}
+output "aws_instance" {
+  description = "Outputs of the EC2 instance."
 
-output "subnet_id" {
-  description = "The ID of the subnet."
-  value       = var.subnet_id == null ? module.vpc[0].public_subnets[0] : var.subnet_id
-}
-
-output "instance_id" {
-  description = "The ID of the instance."
-  value       = aws_instance.this.id
-}
-
-output "instance_arn" {
-  description = "The ARN of the instance."
-  value       = aws_instance.this.arn
-}
-
-output "sg_id" {
-  description = "The ID of the security group."
-  value       = aws_security_group.this.id
-}
-
-output "sg_arn" {
-  description = "The ARN of the security group."
-  value       = aws_security_group.this.arn
-}
-
-output "lambda_arns" {
-  description = "The ARNs of the lambda functions."
   value = {
-    start = aws_lambda_function.start.arn
-    stop  = aws_lambda_function.stop.arn
+    this = aws_instance.this
+  }
+}
+
+output "aws_security_group" {
+  description = "Security group deployed for the instance."
+
+  value = {
+    this = aws_security_group.this
+  }
+}
+
+output "aws_lambda_function" {
+  description = "Lambda automation deployed."
+
+  value = {
+    start = aws_lambda_function.start
+    stop  = aws_lambda_function.stop
+  }
+}
+
+output "aws_iam_role" {
+  description = "IAM roles deployed."
+
+  value = {
+    lambda = aws_iam_role.lambda
+    ec2    = aws_iam_role.ec2
   }
 }

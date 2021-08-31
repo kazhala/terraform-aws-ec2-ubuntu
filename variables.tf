@@ -12,13 +12,11 @@ variable "name" {
 variable "vpc_id" {
   description = "VPC to deploy the EC2 instance. Required if subnet_id is set."
   type        = string
-  default     = null
 }
 
 variable "subnet_id" {
   description = "Subnet to deploy the EC2 instance. Required if vpc_id is set."
   type        = string
-  default     = null
 }
 
 variable "cidr_block" {

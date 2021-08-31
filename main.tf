@@ -26,21 +26,10 @@ locals {
 
 data "aws_caller_identity" "current" {}
 
-module "vpc" {
-  source = "github.com/kazhala/terraform-aws-vpc?ref=v0.2.1"
-
-  count = var.vpc_id == null ? 1 : 0
-
-  name                = var.name
-  cidr_block          = var.cidr_block
-  enable_vpc_flow_log = true
-  subnet_count        = 1
-  tags                = var.tags
-}
-
 resource "aws_security_group" "this" {
   name_prefix = var.name
-  vpc_id      = var.vpc_id == null ? module.vpc[0].vpc_id : var.vpc_id
+  vpc_id      = var.vpc_id
+  description = "${var.name} security group."
 
   tags = merge(
     {
@@ -55,6 +44,7 @@ resource "aws_security_group" "this" {
 }
 
 resource "aws_security_group_rule" "inbound_ssh" {
+  description       = "Inbound ssh."
   type              = "ingress"
   from_port         = 22
   to_port           = 22
@@ -64,6 +54,7 @@ resource "aws_security_group_rule" "inbound_ssh" {
 }
 
 resource "aws_security_group_rule" "inbound_self" {
+  description       = "Inbound ssh."
   type              = "ingress"
   from_port         = 22
   to_port           = 22
@@ -73,12 +64,13 @@ resource "aws_security_group_rule" "inbound_self" {
 }
 
 resource "aws_security_group_rule" "outbound_all" {
+  description       = "Outbound all."
   type              = "egress"
   to_port           = 0
   protocol          = "-1"
   from_port         = 0
   security_group_id = aws_security_group.this.id
-  cidr_blocks       = ["0.0.0.0/0"]
+  cidr_blocks       = ["0.0.0.0/0"] # tfsec:ignore:AWS007
 }
 
 resource "aws_sns_topic" "this" {
@@ -93,6 +85,10 @@ resource "aws_sns_topic" "this" {
     },
     var.tags
   )
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_sns_topic_subscription" "this" {
@@ -125,13 +121,13 @@ data "aws_iam_policy_document" "lambda_permission" {
   }
 
   statement {
-    actions = ["ec2:DescribeInstances"]
-
+    actions   = ["ec2:DescribeInstances"]
     resources = ["*"]
   }
 
   dynamic "statement" {
     for_each = aws_sns_topic.this
+
     content {
       actions = ["sns:Publish"]
 
@@ -145,18 +141,16 @@ resource "aws_iam_role" "lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 
   tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
-resource "aws_iam_policy" "lambda" {
-  name_prefix = "lambda-${var.name}-"
-  policy      = data.aws_iam_policy_document.lambda_permission.json
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "lambda" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = aws_iam_policy.lambda.arn
+resource "aws_iam_role_policy" "lambda" {
+  name   = "ec2-sns-start-stop"
+  role   = aws_iam_role.lambda.id
+  policy = data.aws_iam_policy_document.lambda_permission.json
 }
 
 resource "aws_iam_role_policy_attachment" "cloudwatch" {
@@ -164,7 +158,7 @@ resource "aws_iam_role_policy_attachment" "cloudwatch" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "random_id" "this" {
+resource "random_id" "lambda" {
   byte_length = 8
 }
 
@@ -175,12 +169,13 @@ data "archive_file" "lambda_start" {
   output_file_mode = "0666"
 }
 
+# tfsec:ignore:aws-lambda-enable-tracing
 resource "aws_lambda_function" "start" {
   # checkov:skip=CKV_AWS_116:No dlq.
   # checkov:skip=CKV_AWS_117:No vpc.
   # checkov:skip=CKV_AWS_50:No x-ray.
   # checkov:skip=CKV_AWS_115:No limit.
-  function_name    = "${var.name}-start-${random_id.this.hex}"
+  function_name    = "${var.name}-start-${random_id.lambda.hex}"
   filename         = local.lambda.start.zip
   source_code_hash = data.archive_file.lambda_start.output_base64sha256
   handler          = "start.lambda_handler"
@@ -194,6 +189,8 @@ resource "aws_lambda_function" "start" {
       "TOPIC_ARN" = var.email != null ? aws_sns_topic.this[0].arn : ""
     }
   }
+
+  tags = var.tags
 }
 
 data "archive_file" "lambda_stop" {
@@ -203,12 +200,13 @@ data "archive_file" "lambda_stop" {
   output_file_mode = "0666"
 }
 
+# tfsec:ignore:aws-lambda-enable-tracing
 resource "aws_lambda_function" "stop" {
   # checkov:skip=CKV_AWS_116:No dlq.
   # checkov:skip=CKV_AWS_117:No vpc.
   # checkov:skip=CKV_AWS_50:No x-ray.
   # checkov:skip=CKV_AWS_115:No limit.
-  function_name    = "${var.name}-stop-${random_id.this.hex}"
+  function_name    = "${var.name}-stop-${random_id.lambda.hex}"
   filename         = local.lambda.stop.zip
   source_code_hash = data.archive_file.lambda_stop.output_base64sha256
   handler          = "stop.lambda_handler"
@@ -221,13 +219,20 @@ resource "aws_lambda_function" "stop" {
       "INSTANCE" = aws_instance.this.id
     }
   }
+
+  tags = var.tags
 }
 
 resource "aws_cloudwatch_event_rule" "lambda_start" {
   name_prefix         = "lambda-${var.name}-start-"
   schedule_expression = var.start_schedule == null ? local.event.start[var.time_zone] : var.start_schedule
+  is_enabled          = var.enable_auto_start
 
-  is_enabled = var.enable_auto_start
+  tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_cloudwatch_event_target" "lambda_start" {
@@ -246,8 +251,11 @@ resource "aws_lambda_permission" "lambda_start" {
 resource "aws_cloudwatch_event_rule" "lambda_stop" {
   name_prefix         = "lambda-${var.name}-stop-"
   schedule_expression = var.stop_schedule == null ? local.event.stop[var.time_zone] : var.stop_schedule
+  is_enabled          = var.enable_auto_stop
 
-  is_enabled = var.enable_auto_stop
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_cloudwatch_event_target" "lambda_stop" {
@@ -291,6 +299,8 @@ resource "aws_iam_role_policy_attachment" "ec2" {
 resource "aws_iam_instance_profile" "this" {
   name_prefix = "${var.name}-"
   role        = aws_iam_role.ec2.name
+
+  tags = var.tags
 }
 
 data "aws_ssm_parameter" "ami" {
@@ -304,7 +314,7 @@ resource "aws_instance" "this" {
   ami                    = var.ami == null ? data.aws_ssm_parameter.ami.value : var.ami
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.this.id]
-  subnet_id              = var.subnet_id == null ? module.vpc[0].public_subnets[0] : var.subnet_id
+  subnet_id              = var.subnet_id
   ebs_optimized          = true
 
   root_block_device {
