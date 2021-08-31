@@ -24,8 +24,6 @@ locals {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
 resource "aws_security_group" "this" {
   name_prefix = var.name
   vpc_id      = var.vpc_id
